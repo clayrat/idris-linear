@@ -1,7 +1,6 @@
 module Trees
 
 %language LinearTypes
-
 %default total
 
 data Tree : Type where

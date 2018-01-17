@@ -1,7 +1,6 @@
 module Main 
 
 %language LinearTypes
-
 %default total
 
 g1 : ((1 x : a) -> a -> r) -> (1 z : a) -> a -> r
@@ -28,3 +27,14 @@ g5 k x y = k (f x) y
 g6 : ((1 x : a) -> a -> r) -> (1 z : a) -> a -> r
 g6 k x y = k y (f x)
 -}
+
+data AEither : (a : Type) -> (b : Type) -> Type where
+  ALeft : (1 x : a) -> AEither a b
+  ARight : (1 y : b) -> AEither a b
+
+MPair : (a : Type) -> (b : Type) -> Type
+MPair a b = (1 ae : AEither ((1 x : a) -> IO ()) ((1 y : b) -> IO ())) -> IO ()  
+
+lif : (1 s : Bool) -> (1 p : MPair a a) -> ((1 x : a) -> IO ()) -> IO ()
+lif True  p k = p (ALeft k)
+lif False p k = p (ARight k)

@@ -3,13 +3,12 @@ module Lists
 import Control.Pipeline
 
 %language LinearTypes
-
 %default total
 
 data LList : a -> Type where
     Nil : LList a
     (::) : (1 x : a) -> (1 l : LList a) -> LList a
-  
+
 (++) : (1 xs : LList a) -> (1 ys : LList a) -> LList a
 (++) [] ys = ys
 (++) (x :: xs) ys = x :: (xs ++ ys)
