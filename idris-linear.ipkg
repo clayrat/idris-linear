@@ -1,0 +1,11 @@
+package idris_free
+
+sourcedir = src
+
+modules = Main
+
+main = Main
+
+executable = Main
+        
+opts = "-p contrib"
