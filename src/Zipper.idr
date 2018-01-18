@@ -1,6 +1,7 @@
 module Zipper
 
 import Lists
+import Vects
 
 %language LinearTypes
 %default total
@@ -44,3 +45,27 @@ rev : Dept
 rev = 
   let MkDZ f n = nzip in
    f "King Agamemnon"
+
+-- polymorphic   
+
+data Zipper : (Type -> Type) -> Type -> Type where
+  MkZipper : ((1 x : a) -> f a) -> a -> Zipper f a
+
+to : Zipper f a -> f a
+to (MkZipper f x) = f x
+
+-- there's no linear `let` :(
+listZipper : (xs : LList a) -> (m : Nat) -> Zipper LList a
+listZipper xs m = 
+  MkZipper (\e => ((take m xs) ++ e :: (tail $ drop m xs))) 
+           (head $ drop m xs)
+
+-- no let + rewrite messes things up
+{-
+vectZipper :(xs : LVect (S n) a) -> (m : Nat) -> S n = m + S p -> Zipper (LVect (S n)) a
+vectZipper {a} {p} xs m prf = 
+  let (l, cr) = splitAt {m=S p} m (rewrite sym prf in xs)
+      (c :: r) = cr
+   in
+  MkZipper (\e => rewrite prf in l ++ e :: r) c
+-}

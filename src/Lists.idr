@@ -6,13 +6,34 @@ import Control.Pipeline
 %default total
 %access public export
 
-data LList : a -> Type where
+data LList : Type -> Type where
     Nil : LList a
     (::) : (1 x : a) -> (1 l : LList a) -> LList a
 
 (++) : (1 xs : LList a) -> (1 ys : LList a) -> LList a
 (++) [] ys = ys
 (++) (x :: xs) ys = x :: (xs ++ ys)
+
+take : (n : Nat) -> (xs : LList a) -> LList a
+take  Z    _       = []
+take (S _) []      = []
+take (S n) (x::xs) = x :: take n xs
+
+drop : (n : Nat) -> (xs : LList a) -> LList a
+drop Z     xs      = xs
+drop (S _) []      = []
+drop (S n) (_::xs) = drop n xs
+
+-- TODO YOLO
+head : LList elem -> elem                   
+head [] = believe_me ()
+head (x::xs) = x                                   
+
+tail : LList elem -> LList elem          
+tail [] = believe_me ()
+tail (x::xs) = xs   
+
+-- difference lists
 
 DList : Type -> Type
 DList t = (1 x : LList t) -> LList t
@@ -115,7 +136,7 @@ hfunAppend xs ys = appendRec xs neutral
 
 flatten : LList (LList a) -> LList a
 flatten [] = []
-flatten (xs :: xss) = xs ++ flatten xss 
+flatten (xs :: xss) = xs ++ flatten xss
 
 append1 : DList a -> LList a -> DList a
 append1 k [] = k
@@ -126,4 +147,4 @@ hfunFlatten xss = flattenRec neutral xss
   where 
   flattenRec : DList a -> LList (LList a) -> LList a
   flattenRec k [] = k []
-  flattenRec k (xs :: xss) = flattenRec (append1 k xs) xss         
+  flattenRec k (xs :: xss) = flattenRec (append1 k xs) xss
