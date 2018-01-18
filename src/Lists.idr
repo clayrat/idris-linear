@@ -4,6 +4,7 @@ import Control.Pipeline
 
 %language LinearTypes
 %default total
+%access public export
 
 data LList : a -> Type where
     Nil : LList a
@@ -49,6 +50,7 @@ data ColoredInt : Type where
  White: (1 i : Int) -> ColoredInt
  Blue: (1 i : Int) -> ColoredInt
 
+-- TODO should @-patterns actually work for linear things?
 dutch0 : (reds : DList ColoredInt) -> (whites : DList ColoredInt) -> (blues : DList ColoredInt) -> (xs : LList ColoredInt) -> Lazy $ LList ColoredInt
 dutch0 reds whites blues [] = to (reds <+> whites <+> blues)
 dutch0 reds whites blues (x@(Red   _) :: xs) = dutch0 (reds :+ x) whites blues xs
@@ -98,4 +100,30 @@ testQueue = new {t=Int}
          |> push 8 
          |> push 9
          |> push 12 
-         |> pop |> toMaybe
+         |> pop |> toMaybe     
+
+-- Minamide, "A Functional Representation of Data Structures with a Hole" (1998)
+
+-- append = (++)
+
+hfunAppend : .{a : Type} -> (xs, ys : LList a) -> LList a
+hfunAppend xs ys = appendRec xs neutral
+  where
+  appendRec : LList a -> DList a -> LList a
+  appendRec [] k = k ys
+  appendRec (z::zs) k = appendRec zs (\h => k (z :: h))
+
+flatten : LList (LList a) -> LList a
+flatten [] = []
+flatten (xs :: xss) = xs ++ flatten xss 
+
+append1 : DList a -> LList a -> DList a
+append1 k [] = k
+append1 k (x::xs) = append1 (\h => k (x::h)) xs
+
+hfunFlatten : .{a : Type} -> LList (LList a) -> LList a
+hfunFlatten xss = flattenRec neutral xss
+  where 
+  flattenRec : DList a -> LList (LList a) -> LList a
+  flattenRec k [] = k []
+  flattenRec k (xs :: xss) = flattenRec (append1 k xs) xss         
