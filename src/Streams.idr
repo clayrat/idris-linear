@@ -33,7 +33,7 @@ unshift k x = k $ shift x
 mutual 
   data Source : Type -> Type where
     Nil : Source a
-    (::) : (1 x : a) -> (1 y : N (Sink a)) -> Source a
+    (::) : (1 x : a) -> (1 s : N (Sink a)) -> Source a
  
   data Sink : Type -> Type where
     Full : Sink a
@@ -68,12 +68,12 @@ total
 Snk0 : Type -> Type
 Snk0 = N . Source
 
-flipSnk : ((1 t : Snk0 a) -> Snk0 b) -> (1 s : Src b) -> Src a
-flipSnk _ s  Full    = s Full
-flipSnk f s (Cont k) = s $ Cont $ f k
+flipSnk0 : ((1 t : Snk0 a) -> Snk0 b) -> (1 s : Src b) -> Src a
+flipSnk0 _ s  Full    = s Full 
+flipSnk0 f s (Cont k) = s $ Cont $ f k
 
 total
-flipSrc : ((1 t : Src a) -> Src b) -> (1 s : Snk b) -> Snk a
+flipSrc : (1 f : (1 t : Src a) -> Src b) -> (1 s : Snk b) -> Snk a
 flipSrc f snk src = snk (f src)
 
 mutual 
@@ -82,7 +82,7 @@ mutual
   mapSnk0 f snk (a :: s) = snk $ f a :: mapSrc f s
   
   mapSrc : ((1 x : a) -> b) -> (1 y : Src a) -> Src b
-  mapSrc f = flipSnk (mapSnk0 f)
+  mapSrc f = flipSnk0 (mapSnk0 f)
 
 mapSnk : ((1 x : b) -> a) -> (1 y : Snk a) -> Snk b
 mapSnk f = flipSrc (mapSrc f)
@@ -95,7 +95,7 @@ nnElim0 = mapSnk shift
 
 mutual 
   nnElim : (1 x : Src (NN a)) -> Src a
-  nnElim = flipSnk nnIntro0
+  nnElim = flipSnk0 nnIntro0
 
   nnIntro0 : (1 x : Snk0 a) -> Snk0 (NN a)
   nnIntro0 k []        = k []
@@ -107,14 +107,13 @@ empty : Src a
 empty  Full    = mempty
 empty (Cont k) = k []
 
--- in the paper `a` is linear but this seems wrong
 cons : a -> (1 y : Src a) -> Src a
 cons x s s0 = yield x s0 s
 
 mutual 
   takeSrc : Int -> (1 x : Src a) -> Src a
   takeSrc 0 s t = s Full `mappend` empty t
-  takeSrc i s t = flipSnk (takeSnk0 i) s t
+  takeSrc i s t = flipSnk0 (takeSnk0 i) s t
 
   takeSnk0 : Int -> (1 x : Snk0 a) -> Snk0 a
   takeSnk0 _ s  []       = s []
@@ -133,24 +132,23 @@ mutual
   forwardThenSnk0 snk0 src (a :: s) = snk0 (a :: (appendSrc s src))
 
 -- `s2` is linear in the paper but this doesn't work out for `forwardThenSrc`
--- as in `cons` above, the result of `appendSnk0 s2` is then linear, but gets passed as a non-linear argument of `flipSnk`
-mutual 
-  appendSnk0 : (1 s1 : Snk0 a) -> (s2 : Snk0 a) -> Snk0 a
-  appendSnk0 s1 s2 [] = s1 [] `mappend` s2 []
-  appendSnk0 s1 s2 (a :: s) = s1 (a :: (forwardThenSrc s2 s))
-  
-  forwardThenSrc : (s2 : Snk0 a) -> (1 s : Src a) -> Src a
-  forwardThenSrc s2 = flipSnk (appendSnk0 s2)
+-- as in `cons` above, the result of `appendSnk0 s2` is then linear, but gets passed as a non-linear argument of `flipSnk0`
 
--- this is no longer definable due to `forwardThenSrc` not being linear in first argument   
---appendSnk : (1 t1 : Snk a) -> (1 t2 : Snk a) -> Snk a
---appendSnk t1 t2 s = t1 $ \x => case x of 
---                                 Full   => t2 empty `mappend` s Full
---                                 Cont k => flipSrc (forwardThenSrc k) t2 s
---
---LMonoid (Snk a) where
---  mappend = appendSnk
---  mempty = shift Full
+mutual
+  forwardThenSrc : (1 t2 : Snk a) -> (1 s : Src a) -> Src a
+  forwardThenSrc t2 s Full = t2 s
+  forwardThenSrc t2 s (Cont t1) = s $ Cont $ appendSnk0 t1 t2
+
+  appendSnk0 : (1 t1 : Snk0 a) -> (1 t2 : Snk a) -> Snk0 a
+  appendSnk0 t1 t2 [] = t1 Nil `mappend` t2 empty
+  appendSnk0 t1 t2 (a :: s) = t1 (a :: forwardThenSrc t2 s)
+
+appendSnk : (1 t1 : Snk a) -> (1 t2 : Snk a) -> Snk a
+appendSnk t1 t2 s = t1 (forwardThenSrc t2 s)
+
+LMonoid (Snk a) where
+  mappend = appendSnk
+  mempty = shift Full
 
 LMonoid (Src a) where
   mappend = appendSrc
@@ -196,17 +194,18 @@ zipSnk a b c = a $ \a0 => b $ \b0 => zipSnk (shift a0) (shift b0) c
 forkSrc : (1 sab : Src (a, b)) -> (1 ta : Snk a) -> Src b
 forkSrc sab ta tb = ta $ \x => forkSrc0 sab x tb
 
--- TODO this is currently impossible to define in Idris since you can't do linear destructuring `let`s
---mutual
---  collapseSnk0 : ((1 x : a) -> (b, c)) -> (1 t1 : Snk0 b) -> (1 t2 : Snk0 c) -> Snk0 a
---  collapseSnk0 _    t1 t2 [] = t1 [] `mappend` t2 []
---  collapseSnk0 dup  t1 t2 (x :: xs) = let 1 (y, z) = dup x in t1 (y :: (\c1 => t2 (z :: tee0 dup xs c1)))
---  
---  tee0 : ((1 x : a) -> (b, c)) -> Src a -> Sink b -> Src c
---  tee0 deal s1 t1 Full = s1 Full `mappend` empty t1
---  tee0 deal s1 Full t2 = s1 Full `mappend` empty t2
---  tee0 deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk0 deal t1 t2
---
--- again, `s` can't be linear here
---tee : ((1 x :a) -> (b, c)) -> (1 s : Src a) -> (1 t1 : Snk b) -> Src c
---tee f s t1 t2 = t1 $ \t => tee0 f s t t2
+mutual
+  collapseSnk0 : ((1 x : a) -> (b, c)) -> (1 t1 : Snk0 b) -> (1 t2 : Snk0 c) -> Snk0 a
+  collapseSnk0 _    t1 t2 [] = t1 [] `mappend` t2 []
+  collapseSnk0 dup  t1 t2 (x :: xs) = aux dup t1 t2 (dup x) xs -- TODO linear destructuring `let`s
+
+  aux : ((1 x : a) -> (b, c)) -> (1 t1 : Snk0 b) -> (1 t2 : Snk0 c) -> (1 bc : (b, c)) -> Snk a
+  aux dup t1 t2 (y, z) xs = t1 (y :: (\c1 => t2 (z :: tee0 dup xs c1)))
+  
+  tee0 : ((1 x : a) -> (b, c)) -> (1 s1 : Src a) -> (1 t1 : Sink b) -> Src c
+  tee0 deal s1 t1 Full = s1 Full `mappend` empty t1
+  tee0 deal s1 Full t2 = s1 Full `mappend` empty t2
+  tee0 deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk0 deal t1 t2
+
+tee : ((1 x : a) -> (b, c)) -> (1 s : Src a) -> (1 t1 : Snk b) -> Src c
+tee f s t1 t2 = t1 $ \t => tee0 f s t t2
