@@ -5,11 +5,13 @@ module Streams
 
 data Eff = MkEff (IO ())
 
---interface LMonoid ty where
---  mappend : (1 x : ty) -> (1 y : ty) -> ty
---  mempty : ty
---  
---LMonoid Eff where
+interface LMonoid t where
+  mappend : (1 x : t) -> (1 y : t) -> t
+  mempty : t
+  
+LMonoid Eff where
+  mappend (MkEff x) (MkEff y) = MkEff (x *> y)
+  mempty = MkEff $ pure ()
 
 N : Type -> Type
 N a = (1 x : a) -> Eff
@@ -24,7 +26,6 @@ unshift : (1 x : N (NN a)) -> N a
 unshift k x = k $ shift x
 
 -- TODO not strictly positive, so most stuff is partial from here on
--- TODO Inf ?
 mutual 
   data Source : Type -> Type where
     Nil : Source a
@@ -99,3 +100,41 @@ mutual
   nnIntro0 : (1 x : Snk0 a) -> Snk0 (NN a)
   nnIntro0 k []        = k []
   nnIntro0 k (x :: xs) = x $ \x0 => k (x0 :: nnElim xs)
+
+-- effect-free  
+
+partial  
+empty : Src a   
+empty  Full    = mempty
+empty (Cont k) = k []
+
+-- in the paper `a` is linear but this seems wrong
+partial
+cons : a -> (1 y : Src a) -> Src a
+cons x s s0 = yield x s0 s
+
+mutual 
+  partial
+  takeSrc : Int -> (1 x : Src a) -> Src a
+  takeSrc 0 s t = s Full `mappend` empty t
+  takeSrc i s t = flipSnk (takeSnk0 i) s t
+
+  partial  
+  takeSnk0 : Int -> (1 x : Snk0 a) -> Snk0 a
+  takeSnk0 _ s  []       = s []
+  takeSnk0 i s (a :: s0) = s $ a :: (takeSrc (i - 1) s0)
+
+partial
+takeSnk : Int -> (1 x : Snk a) -> Snk a
+takeSnk n = flipSrc (takeSrc n)
+
+mutual
+  partial
+  appendSrc : (1 x : Src a) -> (1 y : Src a) -> Src a
+  appendSrc s1 s2  Full    = s1 Full `mappend` s2 Full
+  appendSrc s1 s2 (Cont s) = s1 (Cont (forwardThenSnk0 s s2))
+  
+  partial
+  forwardThenSnk0 : (1 x : Snk0 a) -> (1 y : Src a) -> Snk0 a
+  forwardThenSnk0 snk0 src [] = src (Cont snk0)
+  forwardThenSnk0 snk0 src (a :: s) = snk0 (a :: (appendSrc s src))
