@@ -44,7 +44,12 @@ mutual
 infixr 5 &    
 total
 (&) : Type -> Type -> Type
-(&) a b = N (Either (N a) (N b))    
+(&) a b = N (Either (N a) (N b))  
+
+-- TODO can this be used somewhere?
+total 
+par : Type -> Type -> Type
+par a b = N (N a, N b)
 
 await : (1 x : Source a) -> (1 y : Eff & ((1 t : a) -> (1 s : Source a) -> Eff)) -> Eff
 await []        r = r $ Left id
@@ -136,11 +141,11 @@ mutual
 
 mutual
   forwardThenSrc : (1 t2 : Snk a) -> (1 s : Src a) -> Src a
-  forwardThenSrc t2 s Full = t2 s
+  forwardThenSrc t2 s  Full     = t2 s
   forwardThenSrc t2 s (Cont t1) = s $ Cont $ appendSnk0 t1 t2
 
   appendSnk0 : (1 t1 : Snk0 a) -> (1 t2 : Snk a) -> Snk0 a
-  appendSnk0 t1 t2 [] = t1 Nil `mappend` t2 empty
+  appendSnk0 t1 t2 []       = t1 Nil `mappend` t2 empty
   appendSnk0 t1 t2 (a :: s) = t1 (a :: forwardThenSrc t2 s)
 
 appendSnk : (1 t1 : Snk a) -> (1 t2 : Snk a) -> Snk a
@@ -226,8 +231,8 @@ mutual
   dropSrc i = flipSnk0 (dropSnk0 i)
   
   dropSnk0 : Drop a => Int -> (1 s : Snk0 a) -> Snk0 a
-  dropSnk0 0 s s0 = s s0
-  dropSnk0 _ s [] = s []
+  dropSnk0 0 s s0        = s s0
+  dropSnk0 _ s []        = s []
   dropSnk0 i s (x :: s0) = drop x (dropSrc (i-1) s0 (Cont s))
 
 dropSnk : Drop a => Int -> (1 s : Snk a) -> Snk a
@@ -242,10 +247,10 @@ mutual
 
 -- TODO changed arg to linear and the returned structure to `LList`, otherwise we are not allowed to prepend the linear `x`  
   toListSnk0 : (1 k : N (LList a)) -> Snk0 a
-  toListSnk0 k [] = k []
+  toListSnk0 k []        = k []
   toListSnk0 k (x :: xs) = toList xs $ \xs0 => k (x :: xs0)
 
--- TODO these shouldn't work! eta-contraction seems to bypass rig checker
+-- TODO these shouldn't work! eta-reduction seems to bypass rig checker
 reverse0 : (1 s : String) -> String
 reverse0 = prim__strRev
 strCons0 : (1 c : Char) -> (1 s : String) -> String
@@ -254,9 +259,9 @@ strCons0 = prim__strCons
 -- TODO we need linear `strCons` and `reverse` for this to work ^^
 mutual   
   unlinesSnk0 : (1 acc : String) -> Snk0 String -> Snk0 Char
-  unlinesSnk0 acc s [] = s (acc :: empty)
+  unlinesSnk0 acc s []           = s (acc :: empty)
   unlinesSnk0 acc s ('\n' :: s0) = s (reverse0 acc :: linesSrc s0)
-  unlinesSnk0 acc s (c :: s0) = s0 (Cont $ unlinesSnk0 (strCons0 c acc) s)
+  unlinesSnk0 acc s (c    :: s0) = s0 (Cont $ unlinesSnk0 (strCons0 c acc) s)
 
   unlinesSnk1 : Snk0 String -> Snk0 Char
   unlinesSnk1 = unlinesSnk0 ""
@@ -267,9 +272,48 @@ mutual
 unlinesSnk : (1 s : Snk String) -> Snk Char  
 unlinesSnk = flipSrc linesSrc 
 
+mutual 
+  interleave : (1 s1 : Src a) -> (1 s2 : Src a) -> Src a
+  interleave s1 s2  Full    = s1 Full `mappend` s2 Full
+  interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk0 s s2))
+  
+  interleaveSnk0 : (1 snk : Snk0 a) -> (1 src : Src a) -> Snk0 a
+  interleaveSnk0 snk src []       = src (Cont snk)
+  interleaveSnk0 snk src (a :: s) = snk (a :: interleave s src)
+
+interleaveSnk : (1 x : Snk a) -> (1 y : Src a) -> Snk a
+interleaveSnk x y = flipSrc (interleave y) x
+
+-- TODO `p` can't be linear in `filterSrc`\`filterSnk`
+mutual
+  filterSrc : (p : (1 x : a) -> Maybe b) -> (1 src : Src a) -> Src b
+  filterSrc p = flipSnk0 (filterSnk0 p)
+  
+  filterSnk0 : ((1 x : a) -> Maybe b) -> (1 snk : Snk0 b) -> Snk0 a
+  filterSnk0 _ snk [] = snk []
+  filterSnk0 p snk (a :: s) = filterSnk0Aux p snk s (p a)
+
+  filterSnk0Aux : ((1 x : a) -> Maybe b) -> (1 snk : Snk0 b) -> (1 s : N (Sink a)) -> (1 mb : Maybe b) -> Eff
+  filterSnk0Aux p snk s (Just b) = snk (b :: filterSrc p s)
+  filterSnk0Aux p snk s Nothing = s (Cont (filterSnk0 p snk))
+
+filterSnk : (p : (1 x : a) -> Maybe b) -> (1 snk : Snk b) -> Snk a
+filterSnk p = flipSrc (filterSrc p)
+
+mutual
+  unchunk : (1 s : Src (List a)) -> Src a
+  unchunk = flipSnk0 chunkSnk0
+  
+  chunkSnk0 : (1 s : Snk0 a) -> Snk0 (List a)
+  chunkSnk0 s []        = s []
+  chunkSnk0 s (x :: xs) = (fromList x `appendSrc` unchunk xs) (Cont s)
+
+chunkSnk : (1 s : Snk a) -> Snk (List a)
+chunkSnk = flipSrc unchunk
+
 mutual
   collapseSnk0 : ((1 x : a) -> (b, c)) -> (1 t1 : Snk0 b) -> (1 t2 : Snk0 c) -> Snk0 a
-  collapseSnk0 _    t1 t2 [] = t1 [] `mappend` t2 []
+  collapseSnk0 _    t1 t2 []        = t1 [] `mappend` t2 []
   collapseSnk0 dup  t1 t2 (x :: xs) = collapseSnk0Aux dup t1 t2 (dup x) xs -- TODO linear destructuring `let`s ?
 
   collapseSnk0Aux : ((1 x : a) -> (b, c)) -> (1 t1 : Snk0 b) -> (1 t2 : Snk0 c) -> (1 bc : (b, c)) -> Snk a
@@ -281,9 +325,8 @@ mutual
   tee0 deal s1  Full     t2        = s1 Full `mappend` empty t2
   tee0 deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk0 deal t1 t2
 
-tee : ((1 x : a) -> (b, c)) -> (1 s : Src a) -> (1 t1 : Snk b) -> Src c
+tee : ((1 x : a) -> (b, c)) -> (1 s : Src a) -> (t1 : Snk b) -> Src c
 tee f s t1 t2 = t1 $ \t => tee0 f s t t2
 
-collapseSnk : ((1 x : a) -> (b, c)) -> (1 t1 : Snk b) -> (1 t2 : Snk c) -> Snk a
+collapseSnk : ((1 x : a) -> (b, c)) -> (t1 : Snk b) -> (1 t2 : Snk c) -> Snk a
 collapseSnk f t1 t2 s = t2 (tee f s t1)
-
