@@ -30,3 +30,19 @@ data Cmd : proc -> List proc -> List proc -> Type -> Type where
   Recv    : Channel me t ( DoRecv t a k) -> Cmd me xs xs (Res a $ \v => Channel me t (k v))
   Print   : String -> Cmd me xs xs ()
   GetLine : Cmd me xs xs String
+
+data SendOK : (transmitted : Type) -> 
+              (from : proc) -> 
+              (to : proc) -> 
+              (participants : List proc) -> 
+              (continuation : Type) -> Type where
+  SendLR : SendOK a x y [x, y] a
+  SendRL : SendOK a x y [y, x] a
+  SendGhost : Elem x xs -> Elem y xs -> SendOK a x y xs ()
+
+data Protocol : List proc -> Type -> Type where
+  Initiate : (c : proc) -> (s : proc) -> {auto prfc : Elem client xs} -> {auto prfs : Elem server xs} -> Protocol [c, s] () -> Protocol xs ()
+  PSend : (from : proc) -> (to : proc) -> (ty : Type) -> {auto prf : SendOK ty from to xs b} -> Protocol xs b
+  Rec : Inf ( Protocol xs a) -> Protocol xs a 
+  Pure : a -> Protocol xs a
+  (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b  
