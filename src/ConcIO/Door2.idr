@@ -1,5 +1,7 @@
 module ConcIO.Door2
 
+import ConcIO.Res
+
 %language LinearTypes
 %default total
 
@@ -7,14 +9,6 @@ data DoorState = Opened | Closed
 
 data DoorH : DoorState -> Type where
   MkDH : (s : DoorState) -> DoorH s
-
-infix 5 @@
-
-data Res : (a : Type) -> (a -> Type) -> Type where
-  (@@) : (val : a) -> k val -> Res a k
-
-IntOrString : Type
-IntOrString = Res Bool $ \ok => if ok then Int else String
 
 data DoorCmd : Type -> Type where
   Open  : (1 d : DoorH Closed) -> DoorCmd (Res Bool $ \ok => if ok then DoorH Opened else DoorH Closed)
