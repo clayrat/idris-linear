@@ -43,6 +43,6 @@ data SendOK : (transmitted : Type) ->
 data Protocol : List proc -> Type -> Type where
   Initiate : (c : proc) -> (s : proc) -> {auto prfc : Elem client xs} -> {auto prfs : Elem server xs} -> Protocol [c, s] () -> Protocol xs ()
   PSend : (from : proc) -> (to : proc) -> (ty : Type) -> {auto prf : SendOK ty from to xs b} -> Protocol xs b
-  Rec : Inf ( Protocol xs a) -> Protocol xs a 
+  Rec : Inf (Protocol xs a) -> Protocol xs a 
   Pure : a -> Protocol xs a
   (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b  
