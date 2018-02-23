@@ -23,13 +23,24 @@ doorOK h = do h <- Action (Knock h)
               h <- Action (Open h)
               h <- Action (Close h)
               Pure h
-
--- no longer compiles              
+              
 {-
+-- no longer compiles, but because we discard the `h` after first close
 doorBad : (h : DoorH Closed) -> DoorLang (DoorH Closed)
 doorBad h = do h <- Action (Knock h)
                hbad <- Action (Open h)
                h <- Action (Close hbad)
                h <- Action (Close hbad)
                Pure h
--}      
+
+-- also doesn't compile, now because we're reusing `hbad`
+consume : (1 d : DoorH Closed) -> DoorLang ()
+
+doorBad2 : (h : DoorH Closed) -> DoorLang (DoorH Closed)
+doorBad2 h = do h2 <- Action (Knock h)
+                hbad <- Action (Open h2)
+                h3 <- Action (Close hbad)
+                () <- consume h3
+                h4 <- Action (Close hbad)
+                Pure h4
+-}

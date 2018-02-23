@@ -32,7 +32,7 @@ doorOK h = do h <- Action (Knock h)
               h <- Action (Close h)
               Pure h
 
--- no longer compiles              
+-- still doesn't compile
 {-
 doorBad : (h : DoorH Closed) -> DoorLang (DoorH Closed)
 doorBad h = do h <- Action (Knock h)
